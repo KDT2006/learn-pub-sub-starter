@@ -64,12 +64,15 @@ func main() {
 				log.Println("Error publishing JSON:", err)
 			}
 
+		case "help":
+			gamelogic.PrintServerHelp()
+
 		case "quit":
 			log.Println("Quitting...")
 			return
 
 		default:
-			log.Printf("Error unknown command: %s", input[0])
+			log.Printf("Error unknown command: %s\n", input[0])
 		}
 	}
 }
