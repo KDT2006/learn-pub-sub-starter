@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
-	"os"
-	"os/signal"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -18,9 +20,56 @@ func main() {
 
 	log.Printf("Successfully connected to the server %s\n", connStr)
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	log.Println("Shutting down...")
+	gamelogic.PrintServerHelp()
+
+	for {
+		input := gamelogic.GetInput()
+		if len(input) == 0 {
+			continue
+		}
+
+		switch input[0] {
+		case "pause":
+			log.Println("Sending pause message")
+			encoded, err := json.Marshal(routing.PlayingState{
+				IsPaused: true,
+			})
+			if err != nil {
+				log.Println("Error encoding PlayingState to JSON:", err)
+				continue
+			}
+
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, encoded)
+			if err != nil {
+				log.Println("Error publishing JSON:", err)
+			}
+
+		case "resume":
+			log.Println("Sending resume message")
+			encoded, err := json.Marshal(routing.PlayingState{
+				IsPaused: false,
+			})
+			if err != nil {
+				log.Println("Error encoding PlayingState to JSON:", err)
+				continue
+			}
+
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, encoded)
+			if err != nil {
+				log.Println("Error publishing JSON:", err)
+			}
+
+		case "quit":
+			log.Println("Quitting...")
+			return
+
+		default:
+			log.Printf("Error unknown command: %s", input[0])
+		}
+	}
 }
