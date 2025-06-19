@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
@@ -25,6 +25,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	_, queue, err := pubsub.DeclareAndBind(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routing.GameLogSlug+".*",
+		pubsub.Durable,
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to pause: %v", err)
+	}
+	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
+
 	gamelogic.PrintServerHelp()
 
 	for {
@@ -36,30 +48,21 @@ func main() {
 		switch input[0] {
 		case "pause":
 			log.Println("Sending pause message")
-			encoded, err := json.Marshal(routing.PlayingState{
+			payload := routing.PlayingState{
 				IsPaused: true,
-			})
-			if err != nil {
-				log.Println("Error encoding PlayingState to JSON:", err)
-				continue
 			}
-
-			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, encoded)
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, payload)
 			if err != nil {
 				log.Println("Error publishing JSON:", err)
 			}
 
 		case "resume":
 			log.Println("Sending resume message")
-			encoded, err := json.Marshal(routing.PlayingState{
+			payload := routing.PlayingState{
 				IsPaused: false,
-			})
-			if err != nil {
-				log.Println("Error encoding PlayingState to JSON:", err)
-				continue
 			}
 
-			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, encoded)
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, payload)
 			if err != nil {
 				log.Println("Error publishing JSON:", err)
 			}

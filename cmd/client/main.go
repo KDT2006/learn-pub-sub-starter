@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
@@ -31,6 +32,14 @@ func main() {
 	)
 
 	state := gamelogic.NewGameState(username)
+	pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilDirect,
+		routing.PauseKey+"."+username,
+		routing.PauseKey,
+		pubsub.Transient,
+		handlerPause(state),
+	)
 
 	for {
 		input := gamelogic.GetInput()
@@ -63,5 +72,13 @@ func main() {
 		default:
 			log.Printf("Error unknown command: %s\n", input[0])
 		}
+	}
+}
+
+func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print(">")
+
+		gs.HandlePause(ps)
 	}
 }
