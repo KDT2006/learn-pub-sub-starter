@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -34,6 +36,24 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 		ContentType: "application/json",
 		Body:        encoded,
 	})
+
+	return nil
+}
+
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var b bytes.Buffer
+	err := gob.NewEncoder(&b).Encode(val)
+	if err != nil {
+		return err
+	}
+
+	err = ch.PublishWithContext(context.Background(), exchange, key, false, false, amqp.Publishing{
+		ContentType: "application/gob",
+		Body:        b.Bytes(),
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -113,6 +133,56 @@ func SubscribeJSON[T any](
 			}
 
 			if err := delivery.Ack(false); err != nil {
+				fmt.Printf("Error acknowledging message: %v\n", err)
+			}
+		}
+	}()
+
+	return nil
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType simpleQueueType,
+	handler func(T) Acktype,
+) error {
+	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	if err != nil {
+		return fmt.Errorf("could not subscribe to pause: %v", err)
+	}
+	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
+
+	deliveryCh, err := ch.Consume(queueName, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for message := range deliveryCh {
+			var val T
+			reader := bytes.NewReader(message.Body)
+			if err := gob.NewDecoder(reader).Decode(&val); err != nil {
+				fmt.Printf("Error decoding message: %v\n", err)
+				continue
+			}
+
+			ackt := handler(val)
+			switch ackt {
+			case Ack:
+				log.Println("Ack handled")
+				message.Ack(false)
+			case NackRequeue:
+				log.Println("Nack with requeue handled")
+				message.Nack(false, true)
+			case NackDiscard:
+				log.Println("Nack with discard handled")
+				message.Nack(false, false)
+			}
+
+			if err := message.Ack(false); err != nil {
 				fmt.Printf("Error acknowledging message: %v\n", err)
 			}
 		}
