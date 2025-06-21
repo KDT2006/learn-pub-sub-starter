@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -13,6 +14,14 @@ type simpleQueueType byte
 const (
 	Durable = iota
 	Transient
+)
+
+type Acktype byte
+
+const (
+	Ack = iota
+	NackRequeue
+	NackDiscard
 )
 
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
@@ -41,7 +50,16 @@ func DeclareAndBind(
 		return nil, amqp.Queue{}, err
 	}
 
-	queue, err := ch.QueueDeclare(queueName, queueType == Durable, queueType == Transient, queueType == Transient, false, nil)
+	table := make(amqp.Table)
+	table["x-dead-letter-exchange"] = "peril_dlx"
+	queue, err := ch.QueueDeclare(
+		queueName,
+		queueType == Durable,
+		queueType == Transient,
+		queueType == Transient,
+		false,
+		table,
+	)
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
@@ -60,7 +78,7 @@ func SubscribeJSON[T any](
 	queueName,
 	key string,
 	queueType simpleQueueType,
-	handler func(T),
+	handler func(T) Acktype,
 ) error {
 	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
@@ -81,7 +99,18 @@ func SubscribeJSON[T any](
 				continue
 			}
 
-			handler(val)
+			ackt := handler(val)
+			switch ackt {
+			case Ack:
+				log.Println("Ack handled")
+				delivery.Ack(false)
+			case NackRequeue:
+				log.Println("Nack with requeue handled")
+				delivery.Nack(false, true)
+			case NackDiscard:
+				log.Println("Nack with discard handled")
+				delivery.Nack(false, false)
+			}
 
 			if err := delivery.Ack(false); err != nil {
 				fmt.Printf("Error acknowledging message: %v\n", err)
