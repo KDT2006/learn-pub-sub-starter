@@ -181,10 +181,6 @@ func SubscribeGob[T any](
 				log.Println("Nack with discard handled")
 				message.Nack(false, false)
 			}
-
-			if err := message.Ack(false); err != nil {
-				fmt.Printf("Error acknowledging message: %v\n", err)
-			}
 		}
 	}()
 
