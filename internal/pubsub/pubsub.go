@@ -155,6 +155,11 @@ func SubscribeGob[T any](
 	}
 	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
 
+	err = ch.Qos(10, 0, true)
+	if err != nil {
+		return err
+	}
+
 	deliveryCh, err := ch.Consume(queueName, "", false, false, false, false, nil)
 	if err != nil {
 		return err
